@@ -3,13 +3,16 @@ import re
 import requests
 import time
 from playwright.sync_api import sync_playwright
+from urllib.parse import urljoin # Import the URL joining tool
 
 def get_final_mp4_link(page_url: str):
     """
     Automates the full multi-step process to get the final MP4 download link,
-    bypassing anti-bot checks by navigating directly.
+    bypassing anti-bot checks by navigating directly to a full URL.
     """
     final_link = None
+    base_url = "https://vide0.net" # Define the base URL to build full links
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
@@ -25,24 +28,23 @@ def get_final_mp4_link(page_url: str):
             print("Found first 'Download' button. Clicking it...")
             first_download_button.click()
 
-            # --- THE DEFINITIVE FIX ---
-            # Step 3a: Don't click the next button blindly. First, read its destination.
-            print("STEP 3: Locating the 'High Quality' button and reading its destination URL...")
+            # Step 3: Read the partial URL and create a full URL
+            print("STEP 3: Locating 'High Quality' button and reading its destination...")
             high_quality_button = page.locator('a:has-text("High Quality")')
             high_quality_button.wait_for(state="visible", timeout=20000)
             
-            # Read the URL from the button's href attribute
-            destination_url = high_quality_button.get_attribute("href")
-            print(f"Successfully read destination URL: {destination_url}")
+            relative_url = high_quality_button.get_attribute("href")
             
-            # Step 3b: Navigate to that destination URL directly, passing the current page as the "Referer".
-            # This makes the request look like a legitimate click to the server.
-            print("Navigating directly to the destination URL to bypass security check...")
-            current_page_url = page.url
-            page.goto(destination_url, wait_until="domcontentloaded", referer=current_page_url)
+            # --- THE DEFINITIVE FIX ---
+            # Combine the base URL with the partial path to create a full, valid URL.
+            full_destination_url = urljoin(base_url, relative_url)
+            print(f"Constructed full destination URL: {full_destination_url}")
             # --- END OF FIX ---
             
-            print(f"STEP 4: Successfully landed on final page: {page.url}")
+            # Step 4: Navigate directly to the full destination URL
+            print("STEP 4: Navigating directly to the full destination URL...")
+            page.goto(full_destination_url, wait_until="domcontentloaded", referer=page.url)
+            print(f"Successfully landed on final page: {page.url}")
 
             # Step 5: Find the final link on this new page by its destination
             print("STEP 5: Locating the final link by its 'cloudatacdn.com' destination...")
