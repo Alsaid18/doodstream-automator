@@ -4,50 +4,68 @@ import time
 from playwright.sync_api import sync_playwright
 
 # --- Configuration ---
-# The API key is securely retrieved from GitHub's Secrets.
 API_KEY = os.getenv("DOODSTREAM_API_KEY") 
 URL_FILE = "urls.txt"
-# DoodStream API endpoint for remote upload
 UPLOAD_API_URL = f"https://doodapi.co/api/upload/url?key={API_KEY}&url="
 
-def get_direct_link(page_url: str):
-    """Navigates to the DoodStream page and extracts the final direct link after the timer."""
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            print(f"Navigating to page: {page_url}")
+def get_final_mp4_link(page_url: str):
+    """
+    Automates the full multi-step process to get the final MP4 download link.
+    """
+    final_link = None
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        try:
+            print(f"STEP 1: Navigating to initial page: {page_url}")
             page.goto(page_url, timeout=90000)
 
-            # This is the crucial part: find the download button and click it.
-            # The text might vary, so we look for something containing "Download".
-            download_button = page.locator('a:has-text("Download")').first
-            if download_button.is_visible():
-                print("Download button found. Clicking it...")
-                download_button.click()
-            else:
-                print("Could not find the initial download button.")
-                browser.close()
-                return None
-            
-            # Wait for the timer to finish and the final link to appear.
-            # The real download link is often inside an element with class 'download-content'.
-            final_link_selector = ".download-content a"
-            print("Waiting for the final download link to appear...")
-            final_link_element = page.locator(final_link_selector)
-            
-            # Wait for the element to become visible, with a timeout
-            final_link_element.wait_for(timeout=30000)
+            # STEP 2: Click the first "Download" button just below the video
+            print("STEP 2: Looking for the first 'Download' button...")
+            first_download_button = page.locator('a.btn-download-now').first
+            first_download_button.wait_for(timeout=30000)
+            print("Found first 'Download' button. Clicking it...")
+            first_download_button.click()
 
-            direct_link = final_link_element.get_attribute('href')
-            print(f"SUCCESS: Found direct link: {direct_link}")
+            # STEP 3: Wait for the timer and click the "High Quality" button
+            print("STEP 3: Waiting for 'High Quality' button to appear after timer...")
+            high_quality_button = page.locator('a:has-text("High Quality")')
+            # Wait up to 20 seconds to be safe with the 10s timer
+            high_quality_button.wait_for(state="visible", timeout=20000)
+            print("Found 'High Quality' button. Clicking it to go to the next page...")
+            high_quality_button.click()
+            
+            # STEP 4: Wait for the new download page to load
+            print("STEP 4: Waiting for the download page to load...")
+            page.wait_for_load_state("domcontentloaded", timeout=60000)
+            print(f"Landed on page: {page.url}")
+
+            # STEP 5: Prepare to capture the download and click the final "Download File" button
+            print("STEP 5: Preparing to capture the final MP4 link...")
+            
+            # This is an event listener. It will fire when a download starts.
+            with page.expect_download(timeout=30000) as download_info:
+                print("Clicking the final 'Download File' button...")
+                final_download_button = page.locator('a.btn-download-file').first
+                final_download_button.wait_for(timeout=15000)
+                final_download_button.click()
+            
+            download = download_info.value
+            final_link = download.url
+            
+            # We don't need the file, so we can cancel it. We just needed the URL.
+            download.cancel()
+
+            print(f"SUCCESS: Captured final MP4 link: {final_link}")
+
+        except Exception as e:
+            print(f"AN ERROR OCCURRED: {e}")
+            page.screenshot(path="error_screenshot.png") # Takes a screenshot on error for debugging
+        finally:
+            print("Closing browser.")
             browser.close()
-            return direct_link
-    except Exception as e:
-        print(f"An error occurred while getting direct link for {page_url}: {e}")
-        if 'browser' in locals() and browser.is_connected():
-            browser.close()
-        return None
+            
+        return final_link
 
 def upload_to_doodstream(direct_url: str):
     """Sends the direct link to the DoodStream API to start the upload."""
@@ -58,11 +76,14 @@ def upload_to_doodstream(direct_url: str):
     print(f"Requesting remote upload for: {direct_url}")
     try:
         response = requests.get(UPLOAD_API_URL + direct_url, timeout=60)
-        if response.status_code == 200:
-            print(f"API call successful. DoodStream is now processing the video.")
-            print("API Response:", response.json())
+        api_response_json = response.json()
+        print("API Response:", api_response_json)
+
+        if response.status_code == 200 and api_response_json.get('status') == 200:
+             print("API call successful. DoodStream is now processing the video.")
         else:
-            print(f"Error calling DoodStream API. Status: {response.status_code}, Response: {response.text}")
+            print(f"Error reported by DoodStream API. Status: {response.status_code}, Msg: {api_response_json.get('msg')}")
+
     except Exception as e:
         print(f"An error occurred during API call: {e}")
 
@@ -77,13 +98,13 @@ def main():
 
     for url in urls_to_process:
         print(f"\n--- Processing URL: {url} ---")
-        direct_video_link = get_direct_link(url)
+        direct_video_link = get_final_mp4_link(url)
         if direct_video_link:
             upload_to_doodstream(direct_video_link)
-            # Add a small delay between API calls to be safe
-            time.sleep(5)
+            # Add a small delay between processing videos
+            time.sleep(10)
         else:
-            print(f"Could not get direct link for {url}. Skipping upload.")
+            print(f"Could not get final link for {url}. Skipping upload.")
     
     print("\nAutomation process finished.")
 
