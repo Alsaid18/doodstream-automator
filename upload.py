@@ -6,40 +6,47 @@ from playwright.sync_api import sync_playwright
 
 def get_final_mp4_link(page_url: str):
     """
-    Automates the full multi-step process to get the final MP4 download link.
+    Automates the full multi-step process to get the final MP4 download link,
+    bypassing anti-bot checks by navigating directly.
     """
     final_link = None
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         try:
-            # Steps 1-4 are working perfectly.
+            # Step 1: Navigate to the first page
             print(f"STEP 1: Navigating to initial page: {page_url}")
             page.goto(page_url, wait_until="domcontentloaded", timeout=90000)
 
+            # Step 2: Click the "Download Now" button
             print("STEP 2: Looking for the first 'Download' button...")
             first_download_button = page.get_by_role("link", name=re.compile("download", re.IGNORECASE)).first
             first_download_button.wait_for(timeout=30000)
             print("Found first 'Download' button. Clicking it...")
             first_download_button.click()
 
-            print("STEP 3: Waiting for 'High Quality' button to appear after timer...")
+            # --- THE DEFINITIVE FIX ---
+            # Step 3a: Don't click the next button blindly. First, read its destination.
+            print("STEP 3: Locating the 'High Quality' button and reading its destination URL...")
             high_quality_button = page.locator('a:has-text("High Quality")')
             high_quality_button.wait_for(state="visible", timeout=20000)
-            print("Found 'High Quality' button. Clicking it to go to the next page...")
-            high_quality_button.click()
             
-            print("STEP 4: Waiting for the final download page to load...")
-            page.wait_for_load_state("domcontentloaded", timeout=60000)
-            print(f"Landed on final page: {page.url}")
-
-            # --- THE DEFINITIVE FIX ---
-            # Find the link by its destination URL, not by its text.
-            # This looks for any <a> tag where the href attribute contains "cloudatacdn.com".
-            print("STEP 5: Locating the link by its href destination 'cloudatacdn.com'...")
-            final_link_locator = page.locator('a[href*="cloudatacdn.com"]')
+            # Read the URL from the button's href attribute
+            destination_url = high_quality_button.get_attribute("href")
+            print(f"Successfully read destination URL: {destination_url}")
+            
+            # Step 3b: Navigate to that destination URL directly, passing the current page as the "Referer".
+            # This makes the request look like a legitimate click to the server.
+            print("Navigating directly to the destination URL to bypass security check...")
+            current_page_url = page.url
+            page.goto(destination_url, wait_until="domcontentloaded", referer=current_page_url)
             # --- END OF FIX ---
             
+            print(f"STEP 4: Successfully landed on final page: {page.url}")
+
+            # Step 5: Find the final link on this new page by its destination
+            print("STEP 5: Locating the final link by its 'cloudatacdn.com' destination...")
+            final_link_locator = page.locator('a[href*="cloudatacdn.com"]')
             final_link_locator.wait_for(timeout=15000)
             final_link = final_link_locator.get_attribute("href")
 
