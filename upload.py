@@ -40,14 +40,14 @@ def get_final_mp4_link(page_url: str):
             print("STEP 5: Preparing to capture the final MP4 link...")
             
             with page.expect_download(timeout=30000) as download_info:
-                # --- THIS IS THE FIX ---
-                # Find the final button by its visible text "Download File"
-                print("Clicking the final 'Download File' button...")
-                final_download_button = page.get_by_role("link", name=re.compile("Download File", re.IGNORECASE)).first
+                # --- THIS IS THE FINAL FIX ---
+                # Find ANY element with the text "Download" and click it. This is the most flexible way.
+                print("Clicking the final download element (button or link)...")
+                final_download_element = page.get_by_text(re.compile("download", re.IGNORECASE)).first
                 # --- END OF FIX ---
                 
-                final_download_button.wait_for(timeout=15000)
-                final_download_button.click()
+                final_download_element.wait_for(timeout=15000)
+                final_download_element.click()
             
             download = download_info.value
             final_link = download.url
