@@ -1,4 +1,5 @@
 import os
+import re # <-- FIX 1: Import the regular expression module
 import requests
 import time
 from playwright.sync_api import sync_playwright
@@ -18,13 +19,11 @@ def get_final_mp4_link(page_url: str):
         page = browser.new_page()
         try:
             print(f"STEP 1: Navigating to initial page: {page_url}")
-            # Wait for the page to be fully interactive
             page.goto(page_url, wait_until="domcontentloaded", timeout=90000)
 
-            # --- THIS IS THE FIX ---
-            # Find the button by its visible text 'Download' instead of a CSS class
+            # --- FIX 2: Use Python's 're.compile' for the case-insensitive search ---
             print("STEP 2: Looking for the first 'Download' button by its text...")
-            first_download_button = page.get_by_role("link", name=/download/i).first
+            first_download_button = page.get_by_role("link", name=re.compile("download", re.IGNORECASE)).first
             # --- END OF FIX ---
 
             first_download_button.wait_for(timeout=30000)
