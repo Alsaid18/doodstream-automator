@@ -13,46 +13,40 @@ def get_final_mp4_link(page_url: str):
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         try:
-            # Step 1: Navigate to the first page
+            # Steps 1-4 are working perfectly.
             print(f"STEP 1: Navigating to initial page: {page_url}")
             page.goto(page_url, wait_until="domcontentloaded", timeout=90000)
 
-            # Step 2: Click the "Download Now" button
             print("STEP 2: Looking for the first 'Download' button...")
             first_download_button = page.get_by_role("link", name=re.compile("download", re.IGNORECASE)).first
             first_download_button.wait_for(timeout=30000)
             print("Found first 'Download' button. Clicking it...")
             first_download_button.click()
 
-            # Step 3: Click the "High Quality" button
             print("STEP 3: Waiting for 'High Quality' button to appear after timer...")
             high_quality_button = page.locator('a:has-text("High Quality")')
             high_quality_button.wait_for(state="visible", timeout=20000)
             print("Found 'High Quality' button. Clicking it to go to the next page...")
             high_quality_button.click()
             
-            # Step 4: Arrive on the final download page
             print("STEP 4: Waiting for the final download page to load...")
             page.wait_for_load_state("domcontentloaded", timeout=60000)
             print(f"Landed on final page: {page.url}")
 
-            # --- THE FINAL FIX ---
-            # The URL is already on the page. We just need to find the link
-            # and read its 'href' attribute. No click is needed.
-            print("STEP 5: Locating the final download link on the page...")
-            final_link_locator = page.locator("a:has-text('Download file')")
-
-            # Wait for the link to be present
-            final_link_locator.wait_for(timeout=15000)
-            
-            # Read the URL directly from the link's href attribute
-            final_link = final_link_locator.get_attribute("href")
+            # --- THE DEFINITIVE FIX ---
+            # Find the link by its destination URL, not by its text.
+            # This looks for any <a> tag where the href attribute contains "cloudatacdn.com".
+            print("STEP 5: Locating the link by its href destination 'cloudatacdn.com'...")
+            final_link_locator = page.locator('a[href*="cloudatacdn.com"]')
             # --- END OF FIX ---
+            
+            final_link_locator.wait_for(timeout=15000)
+            final_link = final_link_locator.get_attribute("href")
 
             if final_link:
                  print(f"SUCCESS: Captured final direct link: {final_link}")
             else:
-                print("ERROR: Found the link, but it had no href attribute.")
+                print("ERROR: Found the link, but could not read its href attribute.")
 
         except Exception as e:
             print(f"AN ERROR OCCURRED: {e}")
@@ -67,7 +61,6 @@ def main():
     print("--- Starting DoodStream Link Capture Script ---")
     
     with open(URL_FILE, 'r') as f:
-        # Get only the first URL from the file for the test
         url_to_process = f.readline().strip()
 
     if url_to_process:
