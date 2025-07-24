@@ -1,5 +1,5 @@
 import os
-import re # <-- FIX 1: Import the regular expression module
+import re 
 import requests
 import time
 from playwright.sync_api import sync_playwright
@@ -21,11 +21,8 @@ def get_final_mp4_link(page_url: str):
             print(f"STEP 1: Navigating to initial page: {page_url}")
             page.goto(page_url, wait_until="domcontentloaded", timeout=90000)
 
-            # --- FIX 2: Use Python's 're.compile' for the case-insensitive search ---
             print("STEP 2: Looking for the first 'Download' button by its text...")
             first_download_button = page.get_by_role("link", name=re.compile("download", re.IGNORECASE)).first
-            # --- END OF FIX ---
-
             first_download_button.wait_for(timeout=30000)
             print("Found first 'Download' button. Clicking it...")
             first_download_button.click()
@@ -43,8 +40,12 @@ def get_final_mp4_link(page_url: str):
             print("STEP 5: Preparing to capture the final MP4 link...")
             
             with page.expect_download(timeout=30000) as download_info:
+                # --- THIS IS THE FIX ---
+                # Find the final button by its visible text "Download File"
                 print("Clicking the final 'Download File' button...")
-                final_download_button = page.locator('a.btn-download-file').first
+                final_download_button = page.get_by_role("link", name=re.compile("Download File", re.IGNORECASE)).first
+                # --- END OF FIX ---
+                
                 final_download_button.wait_for(timeout=15000)
                 final_download_button.click()
             
