@@ -1,10 +1,9 @@
 name: DoodStream Daily Uploader
 
 on:
-  # This makes the script run automatically every day at 4:05 AM UTC.
   schedule:
     - cron: '5 4 * * *'
-  # This allows you to run the script manually from the Actions tab.
+  # This lets you run it manually
   workflow_dispatch:
 
 jobs:
@@ -27,7 +26,17 @@ jobs:
       - name: Install Playwright browsers
         run: playwright install
 
-      - name: Run the Uploader Script
-        env:
-          DOODSTREAM_API_KEY: ${{ secrets.DOODSTREAM_API_KEY }}
+      - name: Run the DEBUGGER Script
         run: python upload.py
+
+      # --- THIS IS THE NEW PART ---
+      - name: Upload Debug Artifacts for Analysis
+        # This 'if: always()' line is important. It makes sure the files are saved even if the script fails.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-artifacts
+          path: |
+            debug_screenshot.png
+            debug_page_content.html
+      # --- END OF NEW PART ---
