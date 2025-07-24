@@ -1,92 +1,75 @@
 import os
 import re 
-import requests
 import time
 from playwright.sync_api import sync_playwright
-from urllib.parse import urljoin # Import the URL joining tool
+from urllib.parse import urljoin
 
-def get_final_mp4_link(page_url: str):
-    """
-    Automates the full multi-step process to get the final MP4 download link,
-    bypassing anti-bot checks by navigating directly to a full URL.
-    """
-    final_link = None
-    base_url = "https://vide0.net" # Define the base URL to build full links
+# --- THIS IS A DEBUGGING SCRIPT ---
+# The goal is to take a picture of the final page.
+
+def capture_final_page_state(page_url: str):
+    """Navigates to the final page and saves a screenshot and the HTML code for analysis."""
+    
+    base_url = "https://vide0.net"
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         try:
-            # Step 1: Navigate to the first page
-            print(f"STEP 1: Navigating to initial page: {page_url}")
+            print("DEBUG: STEP 1 - Navigating to initial page...")
             page.goto(page_url, wait_until="domcontentloaded", timeout=90000)
 
-            # Step 2: Click the "Download Now" button
-            print("STEP 2: Looking for the first 'Download' button...")
+            print("DEBUG: STEP 2 - Clicking the first 'Download' button...")
             first_download_button = page.get_by_role("link", name=re.compile("download", re.IGNORECASE)).first
             first_download_button.wait_for(timeout=30000)
-            print("Found first 'Download' button. Clicking it...")
             first_download_button.click()
 
-            # Step 3: Read the partial URL and create a full URL
-            print("STEP 3: Locating 'High Quality' button and reading its destination...")
+            print("DEBUG: STEP 3 - Getting the URL from 'High Quality' button...")
             high_quality_button = page.locator('a:has-text("High Quality")')
             high_quality_button.wait_for(state="visible", timeout=20000)
             
             relative_url = high_quality_button.get_attribute("href")
-            
-            # --- THE DEFINITIVE FIX ---
-            # Combine the base URL with the partial path to create a full, valid URL.
             full_destination_url = urljoin(base_url, relative_url)
-            print(f"Constructed full destination URL: {full_destination_url}")
-            # --- END OF FIX ---
+            print(f"DEBUG: Constructed full URL: {full_destination_url}")
             
-            # Step 4: Navigate directly to the full destination URL
-            print("STEP 4: Navigating directly to the full destination URL...")
+            print("DEBUG: STEP 4 - Navigating to the final page...")
             page.goto(full_destination_url, wait_until="domcontentloaded", referer=page.url)
-            print(f"Successfully landed on final page: {page.url}")
+            print(f"DEBUG: Successfully landed on final page: {page.url}")
 
-            # Step 5: Find the final link on this new page by its destination
-            print("STEP 5: Locating the final link by its 'cloudatacdn.com' destination...")
-            final_link_locator = page.locator('a[href*="cloudatacdn.com"]')
-            final_link_locator.wait_for(timeout=15000)
-            final_link = final_link_locator.get_attribute("href")
+            # --- THE MOST IMPORTANT PART: THE SNAPSHOT ---
+            print("DEBUG: STEP 5 - The page has loaded. Waiting 5 seconds for any background scripts to finish...")
+            time.sleep(5) # This is crucial. We give the page's scripts time to add the final link.
 
-            if final_link:
-                 print(f"SUCCESS: Captured final direct link: {final_link}")
-            else:
-                print("ERROR: Found the link, but could not read its href attribute.")
-
-        except Exception as e:
-            print(f"AN ERROR OCCURRED: {e}")
-        finally:
-            print("Closing browser.")
-            browser.close()
+            print("DEBUG: Taking screenshot and saving HTML content...")
             
-        return final_link
+            # Save a picture of what the robot sees
+            page.screenshot(path="debug_screenshot.png", full_page=True)
+            print(">> Successfully saved screenshot to debug_screenshot.png")
+
+            # Save the raw HTML code that the robot sees
+            with open("debug_page_content.html", "w", encoding="utf-8") as f:
+                f.write(page.content())
+            print(">> Successfully saved page HTML to debug_page_content.html")
+            
+        except Exception as e:
+            print(f"AN ERROR OCCURRED DURING DEBUGGING: {e}")
+            # Still try to save artifacts even on error
+            page.screenshot(path="debug_screenshot.png", full_page=True)
+            with open("debug_page_content.html", "w", encoding="utf-8") as f:
+                f.write(page.content())
+            print(">> Saved error state screenshot and HTML.")
+        finally:
+            print("DEBUG: Script finished. Closing browser.")
+            browser.close()
 
 def main():
     URL_FILE = "urls.txt"
-    print("--- Starting DoodStream Link Capture Script ---")
-    
+    print("--- Running DoodStream DEBUGGING Script ---")
     with open(URL_FILE, 'r') as f:
         url_to_process = f.readline().strip()
 
     if url_to_process:
-        print(f"--- Processing URL: {url_to_process} ---")
-        direct_video_link = get_final_mp4_link(url_to_process)
-        
-        if direct_video_link:
-            print("\n--- FINAL RESULT ---")
-            print("The script successfully found the following direct download URL:")
-            print(direct_video_link)
-            print("--------------------\n")
-        else:
-            print("\n--- FINAL RESULT ---")
-            print("The script failed to retrieve the direct download URL.")
-            print("--------------------\n")
-    else:
-        print("No URLs found in urls.txt")
+        capture_final_page_state(url_to_process)
 
 if __name__ == "__main__":
     main()
