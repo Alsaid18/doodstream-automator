@@ -18,32 +18,31 @@ def get_final_mp4_link(page_url: str):
         page = browser.new_page()
         try:
             print(f"STEP 1: Navigating to initial page: {page_url}")
-            page.goto(page_url, timeout=90000)
+            # Wait for the page to be fully interactive
+            page.goto(page_url, wait_until="domcontentloaded", timeout=90000)
 
-            # STEP 2: Click the first "Download" button just below the video
-            print("STEP 2: Looking for the first 'Download' button...")
-            first_download_button = page.locator('a.btn-download-now').first
+            # --- THIS IS THE FIX ---
+            # Find the button by its visible text 'Download' instead of a CSS class
+            print("STEP 2: Looking for the first 'Download' button by its text...")
+            first_download_button = page.get_by_role("link", name=/download/i).first
+            # --- END OF FIX ---
+
             first_download_button.wait_for(timeout=30000)
             print("Found first 'Download' button. Clicking it...")
             first_download_button.click()
 
-            # STEP 3: Wait for the timer and click the "High Quality" button
             print("STEP 3: Waiting for 'High Quality' button to appear after timer...")
             high_quality_button = page.locator('a:has-text("High Quality")')
-            # Wait up to 20 seconds to be safe with the 10s timer
             high_quality_button.wait_for(state="visible", timeout=20000)
             print("Found 'High Quality' button. Clicking it to go to the next page...")
             high_quality_button.click()
             
-            # STEP 4: Wait for the new download page to load
             print("STEP 4: Waiting for the download page to load...")
             page.wait_for_load_state("domcontentloaded", timeout=60000)
             print(f"Landed on page: {page.url}")
 
-            # STEP 5: Prepare to capture the download and click the final "Download File" button
             print("STEP 5: Preparing to capture the final MP4 link...")
             
-            # This is an event listener. It will fire when a download starts.
             with page.expect_download(timeout=30000) as download_info:
                 print("Clicking the final 'Download File' button...")
                 final_download_button = page.locator('a.btn-download-file').first
@@ -52,15 +51,12 @@ def get_final_mp4_link(page_url: str):
             
             download = download_info.value
             final_link = download.url
-            
-            # We don't need the file, so we can cancel it. We just needed the URL.
             download.cancel()
 
             print(f"SUCCESS: Captured final MP4 link: {final_link}")
 
         except Exception as e:
             print(f"AN ERROR OCCURRED: {e}")
-            page.screenshot(path="error_screenshot.png") # Takes a screenshot on error for debugging
         finally:
             print("Closing browser.")
             browser.close()
@@ -101,7 +97,6 @@ def main():
         direct_video_link = get_final_mp4_link(url)
         if direct_video_link:
             upload_to_doodstream(direct_video_link)
-            # Add a small delay between processing videos
             time.sleep(10)
         else:
             print(f"Could not get final link for {url}. Skipping upload.")
